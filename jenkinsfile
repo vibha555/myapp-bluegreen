@@ -1,0 +1,54 @@
+pipeline {
+    agent any
+
+    environment {
+        APP = "myapp"
+        IMAGE = "vibha555/myapp:latest"
+        SERVICE = "myapp-service"
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                git 'https://github.com/vibha555/myapp-bluegreen.git'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh 'docker build -t vibha555/myapp:latest .'
+            }
+        }
+
+        stage('Push Image') {
+            steps {
+                sh 'docker push vibha555/myapp:latest'
+            }
+        }
+
+        stage('Deploy to GREEN') {
+            steps {
+                sh '''
+                kubectl set image deployment/myapp-green myapp=vibha555/myapp:latest
+                kubectl rollout status deployment/myapp-green
+                '''
+            }
+        }
+
+        stage('Approval Gate') {
+            steps {
+                input message: "Deploy GREEN to production?", ok: "Deploy"
+            }
+        }
+
+        stage('Switch Traffic to GREEN') {
+            steps {
+                sh '''
+                kubectl patch service myapp-service \
+                -p '{"spec":{"selector":{"app":"myapp","version":"green"}}}'
+                '''
+            }
+        }
+    }
+}
